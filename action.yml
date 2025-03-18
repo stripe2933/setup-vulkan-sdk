@@ -62,16 +62,16 @@ runs:
           echo vulkan-use-cache=${{ inputs.vulkan-use-cache }}
         ) | tee _vulkan_build/cache-key.txt >&2
 
-    - name: Check Vulkan SDK Cache
-      id: vulkan-cached-sdk
+    - name: Restore Vulkan SDK Cache if exists
+      id: vulkan-cached-sdk-restore
       if: inputs.vulkan-use-cache != 'false'
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: VULKAN_SDK
         key: ${{ runner.os }}-${{ runner.arch }}-vulkan-cached-sdk-${{ hashFiles('_vulkan_build/cache-key.txt') }}
 
     - name: Configure Vulkan SDK Build Prerequisites
-      if: steps.vulkan-cached-sdk.outputs.cache-hit != 'true'
+      if: steps.vulkan-cached-sdk-restore.outputs.cache-hit != 'true'
       shell: bash
       run: |
         # vulkan tools prereq
@@ -85,7 +85,7 @@ runs:
         echo "--------------------------------------------------------------"
 
     - name: Configure Vulkan SDK Components
-      if: steps.vulkan-cached-sdk.outputs.cache-hit != 'true'
+      if: steps.vulkan-cached-sdk-restore.outputs.cache-hit != 'true'
       shell: vsdevenv x64 bash {0}
       run: |
         # cmake configure
@@ -103,7 +103,7 @@ runs:
         || { echo "cmake configure failed" >&2 ; cat _vulkan_build/CMakeFiles/*.log ; exit 4 ; }
 
     - name: Build Vulkan SDK Components
-      if: steps.vulkan-cached-sdk.outputs.cache-hit != 'true'
+      if: steps.vulkan-cached-sdk-restore.outputs.cache-hit != 'true'
       shell: vsdevenv x64 bash {0}
       run: |
         # cmake build
@@ -112,7 +112,7 @@ runs:
         cmake --build ${VULKAN_SDK_BUILD_DIR} --config Release
 
     - name: Install Vulkan SDK Components
-      if: steps.vulkan-cached-sdk.outputs.cache-hit != 'true'
+      if: steps.vulkan-cached-sdk-restore.outputs.cache-hit != 'true'
       shell: bash
       run: |
         # cmake install
@@ -134,6 +134,14 @@ runs:
           exit 3
         fi
 
+    - name: Save Vulkan SDK Cache if necessary
+      id: vulkan-cached-sdk-save
+      if: inputs.vulkan-use-cache != 'false' && steps.vulkan-cached-sdk-restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: VULKAN_SDK
+        key: ${{ steps.vulkan-cached-sdk-restore.outputs.cache-primary-key }}
+        
     - name: Export VULKAN_SDK and bin/ PATH to environment
       shell: bash
       run: |
